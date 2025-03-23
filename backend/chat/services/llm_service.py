@@ -11,6 +11,7 @@ Dependencies:
     - langgraph: For creating conversational agent workflows
 """
 from typing import Any, Callable, Generator
+import logging
 
 from django.conf import settings
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
@@ -23,6 +24,8 @@ from langchain_core.output_parsers import StrOutputParser
 
 from ..utils.template_loader import render_template
 from ..utils.llm_helpers import truncate_messages_to_token_limit
+
+logger = logging.getLogger(__name__)
 
 
 # Create a persistent memory store
@@ -194,6 +197,7 @@ class LLMService:
             chain = prompt_template | llm | StrOutputParser()
             result = chain.invoke({})
         except Exception as e:
+            logger.debug(f"Error summarizing paper content: {e}")
             return "Error summarizing paper content"
 
         return result

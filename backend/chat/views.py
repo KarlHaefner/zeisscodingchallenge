@@ -8,6 +8,7 @@ It includes:
 - PdfView: A new view to download and serve PDFs from arXiv.
 """
 
+import logging
 import traceback
 from typing import Generator
 
@@ -24,6 +25,8 @@ from .serializers import ChatRequestSerializer
 from .services.arxiv_service import ArxivService
 from .services.llm_service import LLMService
 from .utils.llm_helpers import load_model_config
+
+logger = logging.getLogger(__name__)
 
 
 # Decorate methods for tool calling as tools
@@ -107,8 +110,10 @@ class ChatStreamView(APIView):
         use_summarization = settings.USE_SUMMARIZATION
         if use_summarization:
             tools = [search_arxiv, summarize_papers_for_conversation]
+            logger.debug("USE_SUMMARIZATION=True: Using summarization tools")
         else:
             tools = [search_arxiv, fetch_content_from_arxiv_paper]
+            logger.debug("USE_SUMMARIZATION=False: Using content fetching tools")
 
 
         # Set up LLM and workflow
@@ -137,6 +142,7 @@ class ChatStreamView(APIView):
 
             except Exception as exc:
                 error_message = str(exc)
+                logger.debug(f"Error streaming response: {error_message}")
                 yield "An internal error occurred. Please try again later."
             finally:
                 # Log the interaction after streaming is complete

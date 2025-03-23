@@ -11,12 +11,14 @@ Dependencies:
 import json
 import os
 import re
+import logging
 
 import arxiv
 import fitz  # PyMuPDF
 
 from .llm_service import LLMService
 
+logger = logging.getLogger(__name__)
 
 class ArxivService:
     """Service for interacting with arXiv API and processing papers."""
@@ -32,28 +34,35 @@ class ArxivService:
         Returns:
             JSON-formatted string of search results.
         """
+        logger.debug(f"Tool call: search_arxiv with query='{query}', max_results={max_results}")
+        
         arxiv_client = arxiv.Client()
         search = arxiv.Search(
             query=query, max_results=max_results, sort_by=arxiv.SortCriterion.Relevance
         )
 
-        results = arxiv_client.results(search)
-        results_list = []
+        try:
+            results = arxiv_client.results(search)
+            results_list = []
 
-        for paper in results:
-            paper_info = {
-                "title": paper.title,
-                "authors": [author.name for author in paper.authors],
-                "summary": paper.summary,
-                "published": paper.published.isoformat(),
-                "primary_category": paper.primary_category,
-                "categories": paper.categories,
-                "entry_id": paper.entry_id.split("/")[-1],
-                "pdf_url": paper.pdf_url,
-            }
-            results_list.append(paper_info)
+            for paper in results:
+                paper_info = {
+                    "title": paper.title,
+                    "authors": [author.name for author in paper.authors],
+                    "summary": paper.summary,
+                    "published": paper.published.isoformat(),
+                    "primary_category": paper.primary_category,
+                    "categories": paper.categories,
+                    "entry_id": paper.entry_id.split("/")[-1],
+                    "pdf_url": paper.pdf_url,
+                }
+                results_list.append(paper_info)
 
-        return json.dumps(results_list, indent=4)
+            logger.debug(f"Search completed, found {len(results_list)} results")
+            return json.dumps(results_list, indent=4)
+        except Exception as e:
+            logger.debug(f"Error in search_arxiv: {str(e)}")
+            raise
     
     """
     This method is used as a tool in the LangGraph workflow (if env variable USE_SUMMARIZATION is set to True)
@@ -61,6 +70,7 @@ class ArxivService:
     @staticmethod
     def summarize_papers(entry_ids_to_summarize: list[str], chat_summarization: str, user_question: str) -> str:
         """Fetches arXiv papers, downloads and extracts content from PDFs, and summarizes the content."""
+        logger.debug(f"Tool call: summarize_papers with entry_ids={entry_ids_to_summarize}")
 
         # Fetch paper content for each entry_id
         summarizations = {}
@@ -72,14 +82,13 @@ class ArxivService:
                 paper_summary = LLMService.invoke_summarization_chain(
                     chat_summarization, user_question, content
                 )
-            except Exception:
-                print(f"Error summarizing paper {entry_id}")
+            except Exception as e:
+                logger.debug(f"Error summarizing paper {entry_id}: {str(e)}")
                 paper_summary = "Error summarizing paper content"
 
             summarizations[f"Paper_{entry_id}"] = paper_summary
 
-            print(f"Summarized content for {entry_id}")
-
+        logger.debug(f"Summarization completed for {len(summarizations)} papers")
         return json.dumps(summarizations, ensure_ascii=False, indent=2)
     
 
@@ -93,41 +102,49 @@ class ArxivService:
         Returns:
             JSON string containing paper title, authors, abstract, and extracted content.
         """
-        # Fetch arXiv metadata
-        search = arxiv.Search(id_list=[entry_id])
-        paper = next(search.results(), None)
-
-        if not paper:
-            return json.dumps({"error": "Paper not found"})
-
-        title = paper.title
-        authors = [author.name for author in paper.authors]
-        abstract = paper.summary
-        file_pointer = f"#pdf/{entry_id}"
-
-        # Download PDF if not already available
-        assets_dir = os.path.join(os.getcwd(), "assets")
-        os.makedirs(assets_dir, exist_ok=True)
-        file_name = f"{entry_id}.pdf"
-        file_path = os.path.join(assets_dir, file_name)
+        logger.debug(f"Tool call: fetch_paper_content with entry_id={entry_id}")
         
-        if not os.path.exists(file_path):
-            paper.download_pdf(filename=file_path)
-
+        # Fetch arXiv metadata
         try:
-            content = ArxivService._extract_text_from_pdf(file_path)
+            search = arxiv.Search(id_list=[entry_id])
+            paper = next(search.results(), None)
 
-            paper_data = {
-                "title": title,
-                "authors": authors,
-                "abstract": abstract,
-                "content": content,
-                "file_pointer": file_pointer,
-            }
+            if not paper:
+                logger.debug(f"Paper not found with ID: {entry_id}")
+                return json.dumps({"error": "Paper not found"})
 
-            return json.dumps(paper_data, ensure_ascii=False, indent=2)
+            title = paper.title
+            authors = [author.name for author in paper.authors]
+            abstract = paper.summary
+            file_pointer = f"#pdf/{entry_id}"
+
+            # Download PDF if not already available
+            assets_dir = os.path.join(os.getcwd(), "assets")
+            os.makedirs(assets_dir, exist_ok=True)
+            file_name = f"{entry_id}.pdf"
+            file_path = os.path.join(assets_dir, file_name)
+            
+            if not os.path.exists(file_path):
+                paper.download_pdf(filename=file_path)
+
+            try:
+                content = ArxivService._extract_text_from_pdf(file_path)
+
+                paper_data = {
+                    "title": title,
+                    "authors": authors,
+                    "abstract": abstract,
+                    "content": content,
+                    "file_pointer": file_pointer,
+                }
+
+                return json.dumps(paper_data, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.debug(f"Error processing PDF for {entry_id}: {str(e)}")
+                return json.dumps({"error": f"Error processing PDF: {str(e)}"})
         except Exception as e:
-            return json.dumps({"error": f"Error processing PDF: {str(e)}"})
+            logger.debug(f"Error fetching paper {entry_id}: {str(e)}")
+            return json.dumps({"error": f"Error fetching paper: {str(e)}"})
         
 
     @staticmethod
@@ -140,6 +157,8 @@ class ArxivService:
         Returns:
             The content of a paper as a string.
         """
+        logger.debug(f"Fetching paper content as string for {entry_id}")
+        
         # Download PDF if not already available
         assets_dir = os.path.join(os.getcwd(), "assets")
         os.makedirs(assets_dir, exist_ok=True)
@@ -147,13 +166,18 @@ class ArxivService:
         file_path = os.path.join(assets_dir, file_name)
         
         if not os.path.exists(file_path):
-            search = arxiv.Search(id_list=[entry_id])
-            paper = next(search.results(), None)
+            try:
+                search = arxiv.Search(id_list=[entry_id])
+                paper = next(search.results(), None)
 
-            if not paper:
-                return f"Paper with id {entry_id} not found"
+                if not paper:
+                    logger.debug(f"Paper not found with ID: {entry_id}")
+                    return f"Paper with id {entry_id} not found"
 
-            paper.download_pdf(filename=file_path)
+                paper.download_pdf(filename=file_path)
+            except Exception as e:
+                logger.debug(f"Error downloading PDF for {entry_id}: {str(e)}")
+                return f"Error downloading PDF for paper with id {entry_id}"
 
         try:
             content = ArxivService._extract_text_from_pdf(file_path)
@@ -162,10 +186,9 @@ class ArxivService:
             # remove curly braces as they interfere with with the tool call
             paper_data = re.sub(r"{|}", "", paper_data)
 
-            print(f"Extracted content for {entry_id}")
-
             return paper_data
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error extracting text from PDF for {entry_id}: {str(e)}")
             return "Error extracting text from PDF"
 
 
@@ -179,22 +202,26 @@ class ArxivService:
         Returns:
             A dictionary mapping block identifiers to extracted text.
         """
-        doc = fitz.open(pdf_path)
-        extracted_text = {}
-        block_count = 1
+        try:
+            doc = fitz.open(pdf_path)
+            extracted_text = {}
+            block_count = 1
 
-        for page in doc:
-            blocks = page.get_text("blocks")
-            blocks = sorted(blocks, key=lambda b: (b[1], b[0]))
+            for page_num, page in enumerate(doc):
+                blocks = page.get_text("blocks")
+                blocks = sorted(blocks, key=lambda b: (b[1], b[0]))
 
-            for block in blocks:
-                block_text = block[4].strip()
-                block_text = ArxivService._remove_headers_and_footers(block_text)
-                block_text = ArxivService._clean_arxiv_text(block_text)
-                extracted_text[f"block_{block_count}"] = block_text
-                block_count += 1
+                for block in blocks:
+                    block_text = block[4].strip()
+                    block_text = ArxivService._remove_headers_and_footers(block_text)
+                    block_text = ArxivService._clean_arxiv_text(block_text)
+                    extracted_text[f"block_{block_count}"] = block_text
+                    block_count += 1
 
-        return extracted_text
+            return extracted_text
+        except Exception as e:
+            logger.debug(f"Error extracting text from PDF {pdf_path}: {str(e)}")
+            raise
 
     @staticmethod
     def _remove_headers_and_footers(text: str) -> str:
@@ -246,7 +273,7 @@ class ArxivService:
             
         Raises:
             ValueError: If the paper is not found.
-        """
+        """        
         assets_dir = os.path.join(os.getcwd(), "assets")
         os.makedirs(assets_dir, exist_ok=True)
 
@@ -256,15 +283,17 @@ class ArxivService:
         if os.path.exists(file_path):
             return file_path
 
-        # Fetch the paper using the entry_id
-        search = arxiv.Search(id_list=[entry_id])
-        paper = next(search.results(), None)
-        if not paper:
-            raise ValueError(f"Paper with entry_id '{entry_id}' not found")
+        try:
+            # Fetch the paper using the entry_id
+            search = arxiv.Search(id_list=[entry_id])
+            paper = next(search.results(), None)
+            if not paper:
+                logger.debug(f"Paper not found with ID: {entry_id}")
+                raise ValueError(f"Paper with entry_id '{entry_id}' not found")
+            
+            paper.download_pdf(filename=file_path)
 
-        file_name = f"{entry_id}.pdf"
-        file_path = os.path.join(assets_dir, file_name)
-
-        paper.download_pdf(filename=file_path)
-
-        return file_path
+            return file_path
+        except Exception as e:
+            logger.debug(f"Error downloading PDF for {entry_id}: {str(e)}")
+            raise
