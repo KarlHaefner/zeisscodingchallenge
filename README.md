@@ -97,8 +97,8 @@ docker-compose up --build -d
 - **Summarization**
 
 The summarization tool is currently deactivated due to issues. It is intended to allow the bot to summarize up to three papers for questions involving multiple papers. However, it only supports discussions on a single paper for now.
-The problem with the summarization feature is that the summary is always included in the final answer, which it should not be. This is likely due to streaming, as the app starts streaming the summary before it is complete, bypassing the system prompt. The actual answer from the bot follows after the summary is done.
-You can activate this feature in the `.env.local` file. To address the issues, the `fetch_paper_content()` function in `./backend/chat/services/arxiv_service.py` needs to return a string. This function currently doubles as the replacement tool for single-paper discussions. This solution is not ideal, but it preserves the work done so far.
+The problem with the summarization feature is that the summary is always included in the final answer, which it should not be. This is likely due to streaming, as the app starts streaming the summary to the user before it is complete, bypassing the actual "conversation model call" and its system prompt. The actual answer from the bot follows after the summary is done.
+You can activate this feature by setting `USE_SUMMARIZATION=True` in the `.env.local` file.
 
 - **PDF must be removed manually**
 

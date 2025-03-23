@@ -65,7 +65,7 @@ class ArxivService:
         # Fetch paper content for each entry_id
         summarizations = {}
         for entry_id in entry_ids_to_summarize:
-            content = ArxivService.fetch_paper_content(entry_id)
+            content = ArxivService.fetch_paper_content_as_str(entry_id)
 
             # Summarize the content
             try:
@@ -73,13 +73,13 @@ class ArxivService:
                     chat_summarization, user_question, content
                 )
             except Exception:
+                print(f"Error summarizing paper {entry_id}")
                 paper_summary = "Error summarizing paper content"
 
             summarizations[f"Paper_{entry_id}"] = paper_summary
 
-        # summarizations["Paper_2405.13599v1"] ="""The paper "LogRCA: Log-based Root Cause Analysis for Distributed Services" by Thorsten Wittkopp, Philipp Wiesner, and Odej Kao addresses significant challenges in root cause analysis (RCA) within complex IT service environments. The authors identify three main challenges: \n\n1. **Uncertainty in Identifying Root Causes**: It is often unclear which log lines represent the root cause of a failure, leading to a large number of potential candidates that complicate the analysis process.\n2. **Variable Number of Log Lines**: Unlike traditional binary classification, the number of log lines that may represent a root cause can vary significantly from case to case, making it difficult to apply a one-size-fits-all approach.\n3. **Imbalanced Training Data**: The occurrence of certain root causes may be rare, resulting in imbalanced datasets that can negatively affect model performance due to biases towards more common classes.\n\nTo address these challenges, the authors propose LogRCA, a semi-supervised learning method that identifies a minimal set of log lines indicative of a root cause. LogRCA employs a transformer model that can handle noisy data and is trained to rank log lines based on their relevance to the identified root cause. The authors state, "LogRCA determines a set of log lines that together describe the root cause of a failure," and it allows users to dynamically adjust the number of log lines to analyze based on their relevance scores.\n\nAdditionally, the authors introduce a data balancing strategy to improve performance on rare failures by leveraging automatic clustering to estimate the distribution of root causes in the training data. This approach helps mitigate the effects of class imbalance, enhancing the model\'s ability to detect less frequent root causes.\n\nIn evaluations on a large-scale dataset, LogRCA demonstrated superior performance compared to baseline methods, achieving high recall rates for identifying root causes, particularly for rare failures. The authors conclude that their method significantly improves the efficiency of root cause analysis in complex distributed systems, making it a valuable tool for IT service developers and operators."""
+            print(f"Summarized content for {entry_id}")
 
-        print(f"Summarizations: \n{summarizations}\n")
         return json.dumps(summarizations, ensure_ascii=False, indent=2)
     
 
@@ -128,6 +128,46 @@ class ArxivService:
             return json.dumps(paper_data, ensure_ascii=False, indent=2)
         except Exception as e:
             return json.dumps({"error": f"Error processing PDF: {str(e)}"})
+        
+
+    @staticmethod
+    def fetch_paper_content_as_str(entry_id: str) -> str:
+        """Fetches an arXiv paper, downloads and extracts content from PDF if not cached.
+
+        Args:
+            entry_id: The arXiv paper ID (e.g., "2405.12345v1").
+            
+        Returns:
+            The content of a paper as a string.
+        """
+        # Download PDF if not already available
+        assets_dir = os.path.join(os.getcwd(), "assets")
+        os.makedirs(assets_dir, exist_ok=True)
+        file_name = f"{entry_id}.pdf"
+        file_path = os.path.join(assets_dir, file_name)
+        
+        if not os.path.exists(file_path):
+            search = arxiv.Search(id_list=[entry_id])
+            paper = next(search.results(), None)
+
+            if not paper:
+                return f"Paper with id {entry_id} not found"
+
+            paper.download_pdf(filename=file_path)
+
+        try:
+            content = ArxivService._extract_text_from_pdf(file_path)
+            paper_data = f"Paper_{entry_id}: {content}"
+
+            # remove curly braces as they interfere with with the tool call
+            paper_data = re.sub(r"{|}", "", paper_data)
+
+            print(f"Extracted content for {entry_id}")
+
+            return paper_data
+        except Exception:
+            return "Error extracting text from PDF"
+
 
     @staticmethod
     def _extract_text_from_pdf(pdf_path: str) -> dict[str, str]:
