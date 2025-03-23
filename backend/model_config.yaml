@@ -1,0 +1,25 @@
+# Configuration file for OpenAI models
+# This file contains all relevant information for backend and frontend.
+# 
+# Fields:
+# - deployment_name: Name of the Azure deployment
+# - display_name: Display name in the UI
+# - model_name: The actual model name. Needed to load the correct tokenizer
+#   - should start with "gpt-", e.g. "gpt-4o-mini-2024-07-18"
+#   - if the version is not known "gpt-4o-mini" or equivalent can be used
+# - model_token_limit: Max number of tokens for the model. Used to calculate the the remaining tokens in a conversation.
+# - output_token_limit: Max number of response tokens for the model. Used to calculate the the remaining tokens in a conversation.
+#   - Can be set lower if the conversation should have more "space" for user input.
+
+models:
+  - deployment_name: "gpt-4o-mini"
+    display_name: "GPT-4o Mini"
+    model_name: "gpt-4o-mini-2024-07-18"
+    model_token_limit: 128000
+    output_token_limit: 16384
+
+  - deployment_name: "gpt-4o"
+    display_name: "GPT-4o"
+    model_name: "gpt-4o-2024-08-06"
+    model_token_limit: 128000
+    output_token_limit: 16384

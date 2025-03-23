@@ -1,0 +1,33 @@
+/**
+ * @file index.css
+ * @description
+ *   Global stylesheet entry point for the ChallengeChat frontend.
+ *   Imports Tailwind CSS directives and Ant Design base styles.
+ *
+ * @notes
+ *   - Tailwind's "base", "components", and "utilities" are mandatory to enable
+ *     the complete set of utility classes.
+ *   - We import "antd/dist/reset.css" first so that it doesn't override the Tailwind resets too heavily.
+ *   - Add any global overrides or custom styles here if needed.
+ */
+
+ @import "antd/dist/reset.css";
+
+ /* Tailwind CSS directives */
+ @tailwind base;
+ @tailwind components;
+ @tailwind utilities;
+ @tailwind typography;
+ 
+ /* Additional global overrides or custom styles can be placed below. */
+
+ .prose .custom-pre pre {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .custom-markdown pre {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+ 

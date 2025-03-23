@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile.backend
+    volumes:
+      - .:/workspace:cached
+    working_dir: /workspace/backend
+    command: ["sh", "-c", "cd /workspace/backend && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DEBUG=1
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+
+  frontend:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile.frontend
+    volumes:
+      - .:/workspace:cached
+      # Exclude node_modules from volume mounting
+      - /workspace/frontend/node_modules
+    working_dir: /workspace/frontend
+    command: ["sh", "-c", "npm install && npm run dev"]
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
